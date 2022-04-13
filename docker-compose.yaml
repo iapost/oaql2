@@ -1,0 +1,25 @@
+version: "3.9"
+networks:
+   oaql2_network:
+     driver: bridge
+services:
+  mongo:
+     image: mongo:5.0.4
+     volumes:
+       - mongoData:/data/db
+     networks:
+       - oaql2_network
+  server:
+     build: .
+     ports:
+       - "80:80"
+     networks:
+       - oaql2_network
+     command: mvn clean compile exec:java
+     volumes:
+       - mavenRepo:/root/.m2
+     working_dir: /usr/src/mymaven
+     restart: on-failure
+volumes:
+  mongoData:
+  mavenRepo:

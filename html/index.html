@@ -1,0 +1,151 @@
+<html>
+ <head>
+  <title>OAQL2 Server</title>
+  <style>
+  	body, html {
+	  height: 100%;
+	  width: 100%;
+	  margin: 0;
+	  font-family: Arial;
+	}
+
+	.tablink {
+	  background-color: #8a8a5c;
+	  float: left;
+	  border: none;
+	  outline: none;
+	  cursor: pointer;
+	  padding: 14px 16px;
+	  font-size: 17px;
+	}
+
+	.tablink:hover {
+	  background-color: #777;
+	}
+
+	.tabcontent {
+	  background-color: #54ac39;
+	  display: none;
+	  padding: 100px 20px;
+	  height: 100%;
+	  text-align:center;
+	}
+  </style>
+ </head>
+ <body>
+	<button id="btn1" class="tablink" onclick="openPage('tab1', this)" style="width: 33%">Insert Description</button>
+	<button class="tablink" onclick="openPage('tab2', this)" style="width: 33%">Query</button>
+	<button id="btn3" class="tablink" onclick="openPage('tab3', this)" style="width: 34%">Get Description</button>
+	<div id="tab1" class="tabcontent">
+		<div><textarea id="txtInsert" type="text" style="width: 50%; height: 70%;" placeholder="Enter OpenAPI description"></textarea></div>
+		<div>
+		<button id="btnInsert" style="padding: 10px 50px" onclick="insertDescription()">
+			Insert
+		</button>
+		</div>
+		<span id="txtInsertResult"></span>
+	</div>
+	<div id="tab2" class="tabcontent" style="text-align:center;">
+		<div style="display: inline-block; width: 40%;">
+			<textarea id="txtQuery" type="text" style="height: 70%; width:100%" placeholder="Enter OAQL2 query"></textarea>
+		</div>
+		<div style="display: inline-block; width: 40%;">
+			<textarea id="txtQueryResult" type="text" readonly="readonly" style="height: 70%; width:100%" placeholder="Results"></textarea>
+		</div>
+		<div>
+			<button id="btnQuery" style="padding: 10px 50px" onclick="query()">
+				Execute Query
+			</button>
+		</div>
+	</div>
+	<div id="tab3" class="tabcontent" style>
+		<div>
+			<input id="txtId" type="text" minlength=24 maxlength=24 style="padding: 10px" placeholder="Enter id">
+			<button id="btnId" style="padding: 10px 50px" onclick="getDescription()">
+				Find Description
+			</button>
+		</div>
+		<textarea id="txtIdResult" type="text" readonly="readonly" style="height: 70%; width: 50%;" placeholder="Result"></textarea>
+	</div>
+	<script>
+		function insertDescription(){
+			enableDisable("btnInsert","txtInsert",true);
+			sendRequest('POST','insertDescription',document.getElementById('txtInsert').value,cbInsertQuery)
+		}
+		function query(){
+			enableDisable("txtQuery","btnQuery",true);
+			sendRequest('POST','query',document.getElementById('txtQuery').value,cbQuery)
+		}
+		function getDescription(){
+			enableDisable("txtId","btnId",true);
+			sendRequest('GET','description/'+document.getElementById('txtId').value,'',cbGetDescription)
+		}
+		function enableDisable(name1, name2, val){
+			document.getElementById(name1).disabled=val;
+			document.getElementById(name2).disabled=val;
+		}
+		function resultOfInsertion(color,text){
+			var txt=document.getElementById("txtInsertResult");
+			txt.innerHTML=text;
+			txt.style=color;
+		}
+		function openPage(pageName, elmnt){
+			var i, tabcontent, tablinks;
+			// Hide all tabs
+			tabcontent = document.getElementsByClassName("tabcontent");
+			for (i = 0; i < tabcontent.length; i++) {
+				tabcontent[i].style.display = "none";
+			}
+			// Remove the background color of all buttons
+			tablinks = document.getElementsByClassName("tablink");
+			for (i = 0; i < tablinks.length; i++) {
+				tablinks[i].style.backgroundColor = "";
+			}
+			// Show requested tab and color the button pressed
+			document.getElementById(pageName).style.display = "block";
+			elmnt.style.backgroundColor = '#54ac39';
+		}
+		openPage("tab1",document.getElementById("btn1"));
+
+		function sendRequest(method, url, postdata, callback){
+			const xhttp = new XMLHttpRequest();
+			xhttp.onload = function() {callback(this);}
+			xhttp.open(method, url);
+			xhttp.send(postdata);
+		}
+		function cbInsertQuery(xhttp){
+			if(xhttp.readyState==4){
+				if(xhttp.status==204){
+					resultOfInsertion("","Inserted successfully");
+				}else{
+					resultOfInsertion("color:red","Error: "+xhttp.responseText);
+				}
+				enableDisable("btnInsert","txtInsert",false);
+				document.getElementById("txtInsert").value='';
+			}
+		}
+		function cbQuery(xhttp){
+			if(xhttp.readyState==4){
+				if(xhttp.status==200){
+					document.getElementById("txtQueryResult").value=JSON.stringify(JSON.parse(xhttp.responseText), undefined, 2);
+				}else{
+					document.getElementById("txtQueryResult").value=xhttp.responseText;
+				}
+				enableDisable("txtQuery","btnQuery",false);
+			}
+		}
+		function cbGetDescription(xhttp){
+			if(xhttp.readyState==4){
+				if(xhttp.status==200){
+					document.getElementById("txtIdResult").value=JSON.stringify(JSON.parse(xhttp.responseText), undefined, 2);
+				}else if(xhttp.status==404){
+					document.getElementById("txtIdResult").value='Error: description not found';
+				}else{
+					document.getElementById("txtIdResult").value='Error: '+xhttp.responseText;
+				}
+				enableDisable("txtId","btnId",false);
+			}
+		}
+	</script>
+ </body>
+</html>
