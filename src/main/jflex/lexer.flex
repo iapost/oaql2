@@ -32,6 +32,15 @@ NumLiteral = [-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?
 
 %%
 
+/*
+* First we parse the FROM clause, then the rest of the query
+* YYINITIAL stores the whole query into a buffer except the FROM clause which is parsed normally, then resets the lexer with the buffer as input
+* FROMPARSING parses the FROM clause and then returns to YYINITIAL to store the rest of the query into the buffer
+* NORMALPARSING parses the rest of the query after the lexer is reset by YYINITIAL
+* INITIALSTRING is used to store string literals into the buffer during YYINITIAL
+* STRING is used to parse string literals during NORMALPARSING
+*/
+
 <YYINITIAL>{
   \"                          { queryHolder.append(yytext()); yybegin(INITIALSTRING); }
   [ \t\r\n\f]FROM[ \t\r\n\f]  { yybegin (FROMPARSING); queryHolder.append(" "); return symbol(sym.FROM); }

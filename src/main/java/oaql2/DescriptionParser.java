@@ -385,6 +385,8 @@ public class DescriptionParser{
 		JSONArray result=new JSONArray();
 		for(String lname : links.keySet()) {
 			JSONObject link=resolveRef(links.getJSONObject(lname));
+
+			//copy fields
 			JSONObject newlink=new JSONObject().put("name", lname);
 			copyField(newlink,link,"operationRef","operationId","description");
 			if(link.has("server")) {
@@ -392,12 +394,16 @@ public class DescriptionParser{
 				copyField(newlink,serv,"url","ServerVariable");
 				copyField(newlink,"serverDescription",serv,"description");
 			}
+
+			//create array corresponding to LinkParameter table
 			if(link.has("parameters")) {
 				JSONObject params=link.getJSONObject("parameters");
 				for(String pname : params.keySet()) {
 					newlink.append("LinkParameter", new JSONObject().put("name", pname).put("value", params.get(pname)));
 				}
 			}
+
+			//copy rest fields
 			copyField(newlink,link,"requestBody");
 			parseXProperties(newlink,link);
 			result.put(newlink);
@@ -405,30 +411,47 @@ public class DescriptionParser{
 		return result;
 	}
 	
+	/*
+	* Returns array corresponding to Response table
+	*/
 	private JSONArray parseResponses(JSONObject responses)throws Exception{
 		JSONArray resultarr=new JSONArray();
 		for(String code: responses.keySet()) {
 			JSONObject result=new JSONObject();
+
+			//copy status code
 			if(code.equals("default") || code.equals("1XX") || code.equals("2XX") || code.equals("3XX") || code.equals("4XX") || code.equals("5XX")) {
+				//copy code as string if it is a range or "default"
 				result.put("statusCode", code);
-			}else if(code.startsWith("x-")){
+			}else if(code.startsWith("x-")){ //code may be an extension property
 				result.put(code,responses.get(code));
 				continue;
 			}else {
+				//copy code as int
 				result.put("statusCode", Integer.parseInt(code));
 			}
+
 			JSONObject r=resolveRef(responses.getJSONObject(code));
 			copyField(result,r,"description");
+
+			//parse headers
 			if(r.has("headers")) {
 				result.put("Header", parseHeaders(r.getJSONObject("headers")));
 			}
+
+			//parse links
 			if(r.has("links")) {
 				result.put("Link", parseLinks(r.getJSONObject("links")));
 			}
+
 			parseXProperties(result,r);
+			
+			//parse Media Type object 
 			if(r.has("content")) {
 				JSONArray content= parseContent(r.getJSONObject("content"));
 				String base=result.toString();
+
+				//create new response for each contentType
 				for(int i=1; i<content.length(); i++) {
 					JSONObject newresponse=new JSONObject(base);
 					JSONObject c=content.getJSONObject(i);
@@ -445,31 +468,47 @@ public class DescriptionParser{
 		return resultarr;
 	}
 	
+	/*
+	* Returns array corresponding to Example table
+	*/
 	private JSONArray parseExamples(Object example,JSONObject examples)throws Exception{
 		JSONArray result=new JSONArray();
+
+		//parse "example" field
 		if(example!=null) {
 			result.put(new JSONObject().put("value",example));
 		}
+
+		//parse Example object
 		if(examples!=null) {
 			for(String k : examples.keySet()) {
 				result.put(new JSONObject(resolveRef(examples.getJSONObject(k)).toString()).put("name", k));
 			}
 		}
+
 		return result;
 	}
 	
-	
+	/*
+	* Returns array corresponding to Schema, Property or Item table
+	*/
 	private JSONArray parseSchema(JSONObject schema,JSONObject encoding, String name)throws Exception{
 		//encoding and name might be null
 		schema=resolveRef(schema);
 		JSONArray resultArray=new JSONArray();
+
+		//copy all fields to new object except those needing additional parsing (found in "schemaKeys")
 		JSONObject baseSchema=new JSONObject(schema.toString());
 		for(String s : schemaKeys) {
 			baseSchema.remove(s);
 		}
+
+		//add property name if not null
 		if(name!=null) {
 			baseSchema.put("name", name);
 		}
+
+		//parse XML object
 		if(schema.has("xml")){
 			JSONObject xml=schema.getJSONObject("xml");
 			copyField(baseSchema,"xmlName",xml,"name");
@@ -478,13 +517,20 @@ public class DescriptionParser{
 			copyField(baseSchema,"xmlWrapped",xml,"wrapped");
 			baseSchema.put("xmlAttribute",xml.optBoolean("namespace"));
 		}
+
+		//parse External Documentation object
 		if(schema.has("externalDocs")){
 			parseExternalDocs(baseSchema,schema.getJSONObject("externalDocs"));
 		}
+
+		//copy x-refersTo and x-kindOf from referenced schema to this one
 		if(schema.has("x-mapsTo")) {
 			copyField(baseSchema,resolveStringRef(schema.getString("x-mapsTo")),"x-refersTo","x-kindOf");
 		}
+
 		resultArray.put(baseSchema);
+		
+		//parse properties under "properties" keyword
 		if(schema.has("properties")) {
 			JSONObject properties=schema.getJSONObject("properties");
 			for(String key : properties.keySet()) {
@@ -492,6 +538,8 @@ public class DescriptionParser{
 				resultArray=merge(resultArray,newproperty,"Property");
 			}
 		}
+
+		//parse properties under "patternProperties" keyword
 		if(schema.has("patternProperties")) {
 			JSONObject properties=schema.getJSONObject("patternProperties");
 			for(String key : properties.keySet()) {
@@ -499,17 +547,25 @@ public class DescriptionParser{
 				resultArray=merge(resultArray,newproperty,"Property");
 			}
 		}
+
+		//parse property under "additionalProperties" keyword
 		JSONObject addProperties=schema.optJSONObject("additionalProperties");
 		if(addProperties!=null) {
+			//additionalProperties contains a schema object
 			resultArray=merge(resultArray,parseSchema(addProperties,null,null),"Property");
 		}else if(schema.has("additionalProperties")) {
+			//additionalProperties is a boolean instead of an object
 			for(int i=0; i<resultArray.length(); i++) {
 				resultArray.getJSONObject(i).put("additionalProperties", schema.getBoolean("additionalProperties"));
 			}
 		}
+
+		//parse properties under "unevaluatedProperties" keyword
 		if(schema.has("unevaluatedProperties")) {
 			resultArray=merge(resultArray,parseSchema(schema.getJSONObject("unevaluatedProperties"),null,null),"Property");
 		}
+
+		//parse items under "prefixItems" keyword
 		if(schema.has("prefixItems")) {
 			JSONArray prefixItems=schema.getJSONArray("prefixItems");
 			for(int i=0; i<prefixItems.length(); i++) {
@@ -517,16 +573,24 @@ public class DescriptionParser{
 				resultArray=merge(resultArray,newitems,"Item");
 			}
 		}
+
+		//parse item under "items" keyword
 		JSONObject items=schema.optJSONObject("items");
 		if(items!=null) {
 			resultArray=merge(resultArray,parseSchema(items,null,null),"Item");
 		}
+
+		//parse item under "contains" keyword
 		if(schema.has("contains")) {
 			resultArray=merge(resultArray,parseSchema(schema.getJSONObject("contains"),null,null),"Item");
 		}
+
+		//parse items under "unevaluatedItems"
 		if(schema.has("unevaluatedItems")) {
 			resultArray=merge(resultArray,parseSchema(schema.getJSONObject("unevaluatedItems"),null,null),"Item");
 		}
+
+		//parse if-then-else
 		if(schema.has("if")) {
 			JSONArray tmpresult=new JSONArray(resultArray.toString());
 			accMerge(resultArray,parseSchema(schema.getJSONObject("if"),null,null));
@@ -538,24 +602,32 @@ public class DescriptionParser{
 			}
 			resultArray.putAll(tmpresult);
 		}
+
+		//parse "dependentSchemas"
 		if(schema.has("dependentSchemas")) {
 			JSONObject dep=schema.getJSONObject("dependentSchemas");
 			for(String k : dep.keySet()) {
 				accMerge(resultArray,parseSchema(dep.getJSONObject(k),null,null));
 			}
 		}
+
+		//parse "allOf"
 		if(schema.has("allOf")) {
 			JSONArray allof=schema.getJSONArray("allOf");
 			for(int i=0; i<allof.length(); i++) {
 				accMerge(resultArray,parseSchema(allof.getJSONObject(i),null,null));
 			}
 		}
+
+		//parse "anyOf" (identically with "allOf")
 		if(schema.has("anyOf")) {
 			JSONArray anyof=schema.getJSONArray("anyOf");
 			for(int i=0; i<anyof.length(); i++) {
 				accMerge(resultArray,parseSchema(anyof.getJSONObject(i),null,null));
 			}
 		}
+
+		//parse "oneOf"
 		if(schema.has("oneOf")) {
 			JSONArray itemarr=new JSONArray();
 			JSONArray oneof=schema.getJSONArray("oneOf");
@@ -564,6 +636,8 @@ public class DescriptionParser{
 			}
 			accMerge(resultArray,itemarr);
 		}
+
+		//parse Encoding object if given
 		if(encoding!=null) {
 			for(int i=0; i<resultArray.length(); i++) {
 				JSONArray properties=resultArray.getJSONObject(i).optJSONArray("Property");
@@ -587,7 +661,9 @@ public class DescriptionParser{
 		return resultArray;
 	}
 	
-	//insert each key-value pair from source to dest, replacing objects with arrays if key exists already
+	/*
+	* inserts each key-value pair from source to dest, replacing objects with arrays if key exists already
+	*/
 	private static void accumulate(JSONObject dest, JSONObject source)throws Exception{
 		for(String key : source.keySet()) {
 			if(dest.has(key)) {
@@ -629,6 +705,9 @@ public class DescriptionParser{
 		}
 	}
 	
+	/*
+	* Checks if arr contains obj
+	*/
 	private static boolean JSONArrayContains(JSONArray arr, Object obj) {
 		//if obj is JSONObject the function will always return false
 		for(int i=0; i<arr.length(); i++) {
@@ -639,9 +718,11 @@ public class DescriptionParser{
 		return false;
 	}
 	
-	//creates a copy of resultArray for each value in newproperty
-	//and appends that value to each object in the corresponding copy 
-	//of resultArray in an array named key, then merges all arrays and returns the result
+	/*
+	* creates a copy of resultArray for each value in newproperty
+	* and appends that value to each object in the corresponding copy 
+	* of resultArray in an array named key, then merges all arrays and returns the result
+	*/
 	private static JSONArray merge(JSONArray resultArray,JSONArray newproperty,String key)throws Exception{
 		JSONArray[] tmparr=new JSONArray[newproperty.length()];
 		tmparr[0]=resultArray;
@@ -659,8 +740,10 @@ public class DescriptionParser{
 		return tmparr[0];
 	}
 	
-	//creates a copy of resultArray for each object in newarr
-	//and accumulates that object with each object in the corresponding copy 
+	/*
+	* creates a copy of resultArray for each object in newarr
+	* and accumulates that object with each object in the corresponding copy 
+	*/
 	private static void accMerge(JSONArray resultArray,JSONArray newarr) throws Exception{
 		String baseStr=resultArray.toString();
 		for(int k=0; k<resultArray.length(); k++) {
@@ -675,13 +758,19 @@ public class DescriptionParser{
 		}
 	}
 	
+	/*
+	* Returns object corresponding to an entry in Parameter table
+	*/
 	private JSONObject parseParam(JSONObject param)throws Exception{
 		JSONObject parsedParam=new JSONObject().put("name",param.getString("name"));
+
+		//copy fields
 		copyField(parsedParam,param,"in","description");
 		parsedParam.put("required",param.optBoolean("required"));
 		parsedParam.put("deprecated",param.optBoolean("deprecated"));
 		parsedParam.put("allowEmptyValue",param.optBoolean("allowEmptyValue"));
 		
+		//copy "style" field
 		String val;
 		if(param.has("style")) {
 			val=param.getString("style");
@@ -692,9 +781,12 @@ public class DescriptionParser{
 		}
 		parsedParam.put("style", val);
 
+		//copy rest fields
 		parsedParam.put("explode",param.optBoolean("explode",val.equals("form")));
 		parsedParam.put("allowReserved", param.optBoolean("allowReserved"));
 		parseXProperties(parsedParam,param);
+
+		//parse Schema or Media Type object
 		if(param.has("schema")) {
 			parsedParam.put("Schema", parseSchema(param.getJSONObject("schema"),null,null));
 		}else if(param.has("content")) {
@@ -702,6 +794,8 @@ public class DescriptionParser{
 			copyField(parsedParam,tmp,"contentType","Schema","Example");
 			parseXProperties(parsedParam,tmp);
 		}
+
+		//parse examples
 		if(param.has("example") || param.has("examples")) {
 			if(parsedParam.has("Example")) {
 				parsedParam.getJSONArray("Example").putAll(parseExamples(param.opt("example"), param.optJSONObject("examples")));
@@ -709,12 +803,17 @@ public class DescriptionParser{
 				parsedParam.put("Example", parseExamples(param.opt("example"), param.optJSONObject("examples")));
 			}
 		}
+
 		return parsedParam;
 	}
 	
+	/*
+	* Returns array corresponding to Callback table
+	*/
 	private JSONArray parseCallbacks(JSONObject callbacks) throws Exception{
 		JSONArray result=new JSONArray();
 		for(String cname : callbacks.keySet()) {
+			//parse each callback
 			JSONObject callback=resolveRef(callbacks.getJSONObject(cname));
 			for(String path : callback.keySet()) {
 				JSONArray tmpresult=parsePathItem(path,callback.getJSONObject(path),null,null);
@@ -728,9 +827,13 @@ public class DescriptionParser{
 		return result;
 	}
 	
+	/*
+	* Returns array corresponding to Webhook table
+	*/
 	private JSONArray parseWebhooks(JSONObject webhooks) throws Exception{
 		JSONArray result=new JSONArray();
 		for(String wname : webhooks.keySet()) {
+			//parse each webhook
 			JSONArray tmp=parsePathItem(null,webhooks.getJSONObject(wname),null,null);
 			for(int i=0; i<tmp.length(); i++) {
 				tmp.getJSONObject(i).put("name", wname);
@@ -740,31 +843,43 @@ public class DescriptionParser{
 		return result;
 	}
 	
+	/*
+	* Parses a Path Item object
+	*/
 	private JSONArray parsePathItem(String path, JSONObject pathitem, JSONArray baseSecurity, JSONArray baseServers) throws Exception{
 		//path,baseSecurity and baseServers might be null
 		JSONArray result=new JSONArray();
+
+		//find and add referenced path item
 		JSONObject resolvedItem=resolveRef(pathitem);
 		if(resolvedItem!=null && pathitem!=resolvedItem) {
 			for(String key : resolvedItem.keySet()) {
 				pathitem.put(key, resolvedItem.get(key));
 			}
 		}
+
+		//if servers given for all operations on this path, overwrite global servers
 		if(pathitem.has("servers")) {
 			baseServers=parseServers(pathitem.getJSONArray("servers"));
 		}
+
 		JSONObject baseRequest = new JSONObject();
 		copyField(baseRequest,pathitem,"summary","description");
+
+		//parse Parameters
 		JSONArray params = pathitem.optJSONArray("parameters");
 		if(params!=null) {
 			for(int i=0; i<params.length(); i++) {
 				baseRequest.append("Parameter",parseParam(resolveRef(params.getJSONObject(i))));
 			}
 		}
+
 		parseXProperties(baseRequest,pathitem);
 		String baseStr = baseRequest.toString();
 		
 		for(String method : httpMethods) {
 			if(pathitem.has(method)) {
+				//create separate request for each method
 				JSONObject req = pathitem.getJSONObject(method);
 				JSONObject newreq = new JSONObject(baseStr);
 				if(path!=null) {
@@ -772,29 +887,40 @@ public class DescriptionParser{
 				}
 				newreq.put("method", method);
 				copyField(newreq,req,"summary","description","operationId","tags");
+
+				//if servers defined for this method, overwrite global servers
 				if(req.has("servers")) {
 					newreq.put("Server",parseServers(req.getJSONArray("servers")));
 				}else if(baseServers!=null) {
 					newreq.put("Server", baseServers);
 				}
+
+				//if security requirements defined for this method, overwrite global security requirements
 				if(req.has("security")) {
 					newreq.put("Security",parseSecurityRequirements(req.getJSONArray("security")));
 				}else if(baseSecurity!=null) {
 					newreq.put("Security", baseSecurity);
 				}
+
+				//parse callbacks
 				if(req.has("callbacks")) {
 					newreq.put("Callback",parseCallbacks(req.getJSONObject("callbacks")));
 				}
+
 				parseExternalDocs(newreq,req.optJSONObject("externalDocs"));
 				newreq.put("deprecated", req.optBoolean("deprecated"));
 				parseXProperties(newreq,req);
+
+				//if parameters defined for this operation, overwrite global ones
 				if(req.has("parameters")) {
 					JSONArray newparams=req.getJSONArray("parameters");
 					if(!newreq.has("Parameter")) {
+						//no global parameters defined, just append these parameters
 						for(int i=0; i<newparams.length(); i++){
 							newreq.append("Parameter", parseParam(resolveRef(newparams.getJSONObject(i))));
 						}
 					}else {
+						//need to overwrite only global parameters having the same name as the new parameters defined
 						JSONArray baseparams=newreq.getJSONArray("Parameter");
 						for(int i=0; i<newparams.length(); i++) {
 							JSONObject newparam=newparams.getJSONObject(i);
@@ -809,14 +935,21 @@ public class DescriptionParser{
 						}
 					}
 				}
+
+				//parse responses
 				if(req.has("responses")) {
 					newreq.put("Response", parseResponses(req.getJSONObject("responses")));
 				}
+
+				//parse Request Body object
 				if(req.has("requestBody")) {
 					JSONObject body = resolveRef(req.getJSONObject("requestBody"));
+
 					copyField(newreq,"bodyDescription",body,"description");
 					newreq.put("bodyRequired", body.optBoolean("required"));
 					parseXProperties(newreq,body);
+
+					//parse Media Type object
 					JSONArray content= parseContent(body.getJSONObject("content"));
 					String basereq=newreq.toString();
 					for(int i=1; i<content.length(); i++) {
@@ -830,17 +963,21 @@ public class DescriptionParser{
 					copyField(newreq,c,"contentType","Schema","Example");
 					parseXProperties(newreq,c);
 				}
+
 				result.put(newreq);
 			}
 		}
 		return result;
 	}
 	
+	/*
+	* Returns array corresponding to Request table
+	*/
 	private JSONArray parseRequests(JSONObject paths, JSONArray baseSecurity, JSONArray baseServers)throws Exception{
 		//baseSecurity and baseServers might be null
 		JSONArray requests=new JSONArray();
 		for(String path : paths.keySet()) {
-			if(!path.startsWith("/")) {
+			if(!path.startsWith("/")) { //avoid mistaking extension properties as paths
 				continue;
 			}
 			JSONObject pathitem = paths.getJSONObject(path);
@@ -852,6 +989,9 @@ public class DescriptionParser{
 		return requests;
 	}
 	
+	/*
+	* Parses object under "content"
+	*/
 	private JSONArray parseContent(JSONObject content)throws Exception{
 		JSONArray result=new JSONArray();
 		for(String type : content.keySet()) {
@@ -870,6 +1010,9 @@ public class DescriptionParser{
 		return result;
 	}
 	
+	/*
+	* Returns array corresponding to Server table
+	*/
 	private JSONArray parseServers(JSONArray serv) throws Exception{
 		JSONArray result=new JSONArray();
 		for(int i=0; i<serv.length(); i++) {			
@@ -878,10 +1021,15 @@ public class DescriptionParser{
 		return result;
 	}
 	
+	/*
+	* Parses a Server object
+	*/
 	private JSONObject parseServer(JSONObject server) throws Exception{
 		JSONObject newserver= new JSONObject();
 		copyField(newserver,server,"url","description");
 		parseXProperties(newserver,server);
+
+		//create array corresponding to ServerVariable table
 		JSONObject vars=server.optJSONObject("variables");
 		if(vars!=null) {
 			for(String keycounter : vars.keySet()) {
@@ -891,6 +1039,9 @@ public class DescriptionParser{
 		return newserver;
 	}
 
+	/*
+	* Copies fields from External Documentation object into newobj
+	*/
 	private void parseExternalDocs(JSONObject newobj,JSONObject extdocsobj)throws Exception{
 		if(extdocsobj==null) {
 			return;

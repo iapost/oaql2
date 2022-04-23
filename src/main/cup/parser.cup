@@ -18,12 +18,25 @@ parser code {:
 :};
 
 action code {:
+	//remembers if the query contains the DISTINCT keyword in SELECT
 	boolean hasDistinct=false;
+
+	//used to find quickly tree node with specific table name or alias
 	HashMap<String,TreeNode> treeMap=new HashMap<String,TreeNode>();
+
+	//root of tree
 	TreeNode treeHead;
+
+	//list of tables given in SELECT with ".*" suffix
 	ArrayList<String> exclusionList;
+
+	/*
+	* Returns the MongoDB pipeline
+	*/
 	public ArrayList<Document> constructPipeline(Document projection, Document condition,  Document orderby) throws Exception{
 		ArrayList<Document> pipeline=new ArrayList<Document>();
+
+		//Add match stage for Part 1
 		if(condition!=null) {
 			treeHead.resolveFullPath();
 			ArrayList<Document> condList=new ArrayList<Document>();
@@ -39,10 +52,16 @@ action code {:
 				pipeline.add(new Document("$match",new Document("$or",condList)));
 			}
 		}
+
+		//Add stages for Part 2
 		pipeline.addAll(getUnwinds());
+
+		//Add match stage for Part 3
 		if(condition!=null) {
 			pipeline.add(new Document("$match",condition));
 		}
+
+		//Add stages for Part 4
 		if(exclusionList.size()>0) {
 			Document exclProjection=new Document();
 			for(String s : exclusionList) {
@@ -67,8 +86,13 @@ action code {:
 			pipeline.add(new Document("$sort",orderby));
 		}
 		pipeline.add(new Document("$project",projection.append("_id",0)));
+
 		return pipeline; 
 	}
+
+	/*
+	* Translates field names of sort stage if DISTINCT keyword was specified so that it can be placed after group stage
+	*/
 	public static Document translateOrderBy(Document orderby, Document projection) throws Exception{
 		Document finalOrderby=new Document();
 		for(Entry<String,Object> e : projection.entrySet()) {
@@ -86,6 +110,10 @@ action code {:
 		}
 		return finalOrderby;
 	}
+
+	/*
+	* Translates match stage from Part 3 to produce match stage for Part 1
+	*/
 	public Document translateInitialMatch(Document c, String prefix) throws Exception{
 		String k=c.keySet().iterator().next();
 		if(k.equals("$expr")) {
@@ -130,6 +158,10 @@ action code {:
 		int dot=k.indexOf(".");
 		return new Document(prefix+treeMap.get(k.substring(0,dot)).fullpath+k.substring(dot),c.get(k));
 	}
+
+	/*
+	* Gets addFields and unwind stages for each node of the tree recursively
+	*/
 	public static ArrayList<Document> getUnwindsRecursive(TreeNode node){
 		if(node.children.size()==0) {
 			return null;
@@ -147,6 +179,10 @@ action code {:
 		}
 		return result;
 	}
+
+	/*
+	* Gets project, addFields and unwind stages for Part 2
+	*/
 	public ArrayList<Document> getUnwinds(){
 		ArrayList<Document> result=new ArrayList<Document>();
 		result.add(new Document("$project",new Document(treeHead.alias,Model.tables.get(treeHead.table).pathsForConcat)));
@@ -166,6 +202,10 @@ action code {:
 		}
 		return result;
 	}
+
+	/*
+	* Checks table name and alias for errors and adds it to the tree
+	*/
 	public TreeNode checkFromTable(String tableName, String alias) throws Exception{
 		if(!Model.tables.containsKey(tableName)) {
 			throw new Exception("Table not recognised: "+tableName);
@@ -189,6 +229,10 @@ action code {:
 		}
 		return node;
 	}
+
+	/*
+	* Checks if the table can be joined as specified in the query and adds a relationship between the nodes of the two tables
+	*/
 	public void newFromTable(String tableName, String alias, String joinTable) throws Exception{
 		TreeNode node=checkFromTable(tableName,alias);
 		if(joinTable==null) {
@@ -216,6 +260,10 @@ action code {:
 			throw new Exception("Cannot join tables "+tableName+" and "+joinNode.table);
 		}
 	}
+
+	/*
+	* Same as newFromTable above for when joining a Property or Item with another Property or Item
+	*/
 	public void newFromTable(String tableName, String alias, String parentTable, String field, String childTable) throws Exception {
 		checkFromTable(tableName,alias);
 		TreeNode parentNode=treeMap.get(parentTable);
@@ -238,6 +286,10 @@ action code {:
 		childNode.parent=parentNode;
 		parentNode.children.add(childNode);
 	}
+
+	/*
+	* Translates condition that compares a field with a string value
+	*/ 
 	public Document checkField(String str,String operator, String value) throws Exception{
 		String result=translateField(str,Model.STR_TYPE);
 		int dot=str.indexOf(".");
@@ -266,6 +318,10 @@ action code {:
 		}
 		return new Document(result,new Document(operator,value)); 
 	}
+
+	/*
+	* Translates condition that compares a field with a boolean value
+	*/
 	public Document checkField(String str, String operator, boolean value) throws Exception{
 		if(operator.equals("$ne")){
 			value=!value;
@@ -274,6 +330,10 @@ action code {:
 		}
 		return new Document(translateField(str,Model.BOOL_TYPE),value); 
 	}
+
+	/*
+	* Translates condition that compares a field with a numeric value
+	*/
 	public Document checkField(String str, String operator, double value) throws Exception{
 		int dot=str.indexOf(".");
 		String tableName=treeMap.get(str.substring(0,dot)).table;
@@ -283,6 +343,10 @@ action code {:
 		}
 		return new Document(translateField(str,Model.NUM_TYPE), new Document(operator, value));
 	} 
+
+	/*
+	* Translates condition that uses the LIKE operator
+	*/
 	public Document parseLike(String field, String regex) throws Exception{
 		regex="^"+regex.replaceAll("%",".*").replaceAll("_",".")+"$";
 		if(regex.startsWith("^.*")) {
@@ -293,6 +357,10 @@ action code {:
 		}
 		return new Document(translateField(field,Model.STR_TYPE), new Document("$regex",regex).append("$options", "s"));
 	}
+
+	/*
+	* Finds tree node corresponding to table name
+	*/
 	public TreeNode translateTable(String table)throws Exception{
 		if(!treeMap.containsKey(table)) {
 			throw new Exception("Table "+table+" not included in FROM clause");
@@ -303,6 +371,10 @@ action code {:
 		}
 		return tmp;
 	}
+
+	/*
+	* Checks field's data type and translates it to <table_alias>.<field_name> 
+	*/
 	public String translateField(String str, char givenType) throws Exception{
 		int dot=str.indexOf('.');
 		String field=str.substring(dot+1);
@@ -321,6 +393,10 @@ action code {:
 		}
 		return tmp.alias+"."+field;
 	}	
+
+	/*
+	* Used for SELECT * queries
+	*/
 	public Document parseStar() {
 		Document result=new Document();
 		for(TreeNode t : treeMap.values()) {
@@ -332,6 +408,10 @@ action code {:
 		}
 		return result;
 	}
+
+	/*
+	* Returns data type of field
+	*/
 	public Character typeOfField(String str) throws Exception{
 		int dot=str.indexOf('.');
 		String field=str.substring(dot+1);
@@ -341,6 +421,13 @@ action code {:
 		}
 		return Model.tableFields.get(table+"."+field);
 	}
+
+	/*
+	* Translates condition
+	* <field> = <field>
+	* or
+	* <field> IN <field>
+	*/
 	public Document checkFieldToField(String field1, String field2, String op)throws Exception{
 		String a=translateField(field1,Model.ANY_TYPE);
 		String b=translateField(field2,Model.ANY_TYPE);
@@ -364,6 +451,10 @@ action code {:
 		}
 		return new Document("$and",List.<Document>of(new Document(a,new Document("$exists",true)),new Document("$expr",new Document(op,List.<String>of("$"+a,"$"+b)))));
 	}
+
+	/*
+	* Finds code ranges when querying the Response.statusCode field
+	*/
 	public static Document statusCodeCondition(String field,String operator, double value) {
 		ArrayList<Document> arr=new ArrayList<Document>();
 		arr.add(new Document(field, new Document(operator, value)));

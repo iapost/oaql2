@@ -22,6 +22,7 @@ public class Model {
 	public Object pathsForConcat;
 	public Document contains;
 
+	//Fields of each table and their data types
 	public static HashMap<String,Character> tableFields=new HashMap<String,Character>(Map.ofEntries(
 			entry("Service.title",STR_TYPE),
 			entry("Service.id",STR_TYPE),
@@ -246,6 +247,7 @@ public class Model {
 			entry("Webhook.tags",(char)(STR_TYPE|ARRAY_TYPE))
 	));	
 	
+	//Allowed joins between two tables
 	public static HashSet<String> tablePairs = new HashSet<String>(Arrays.asList(
 			"Service.Request",
 			"Service.Tag",
@@ -288,9 +290,10 @@ public class Model {
 			"Webhook.Parameter",
 			"Webhook.Security",
 			"Webhook.Response",
-			"Tag.Schema" //because of x-onResource
+			"Tag.Schema"
 	));
 
+	//Information about each table calculated once at startup and stored for better performance
 	public static HashMap<String,Model> tables=new HashMap<String,Model>(Map.ofEntries(
 		entry("Service",new Model("Service")),
 		entry("Tag",new Model("Tag")),
@@ -312,6 +315,7 @@ public class Model {
 		entry("Webhook",new Model("Webhook"))
 	));
 	
+	//JS function for concatenating all Property arrays during querying in MongoDB
 	public static String propFunc="function rec(obj){"
 										+ "  var res=[];"
 										+ "  if(obj.hasOwnProperty(\"Property\")){"
@@ -328,6 +332,7 @@ public class Model {
 										+ "  return res;"
 										+ "}";
 
+	//JS function for concatenating all Item arrays during querying in MongoDB
 	public static String itemFunc="function rec(obj){"
 										+ "  var res=[];"
 										+ "  if(obj.hasOwnProperty(\"Item\")){"
@@ -344,6 +349,7 @@ public class Model {
 										+ "  return res;"
 										+ "}";
 
+	//paths to index in metadata objects
 	public static String[] indexPaths = { 
 		"Service.Request.method",
 		"Service.Request.path",
@@ -396,6 +402,9 @@ public class Model {
 		"Service.Request.Response.Header.Item.type"
 	};
 
+	/*
+	* Calculates info for each table
+	*/
 	public Model(String tableName) {
 		if(tableName.equals("Property")||tableName.equals("Item")){
 			paths=new ArrayList<String>();
@@ -406,16 +415,16 @@ public class Model {
 		unwindsNum=0;
 		if(tableName.equals("Item")||tableName.equals("Property")) {
 			for(String p : getPaths("Schema",0)) {
-				int tmp=StringUtils.countMatches(p, '.');
-				if(tmp+1>unwindsNum) {
-					unwindsNum=tmp+1;
+				int tmp=StringUtils.countMatches(p, '.')+1;
+				if(tmp>unwindsNum) {
+					unwindsNum=tmp;
 				}
 			}
 		}else {
 			for(String p : paths) {
-				int tmp=StringUtils.countMatches(p, '.');
-				if(tmp+1>unwindsNum) {
-					unwindsNum=tmp+1;
+				int tmp=StringUtils.countMatches(p, '.')+1;
+				if(tmp>unwindsNum) {
+					unwindsNum=tmp;
 				}
 			}
 		}
@@ -447,6 +456,9 @@ public class Model {
 		pathsForConcat=new Document("$concatArrays",newlist);
 	}
 	
+	/*
+	* Finds all locations of an array in a metadata object
+	*/
 	static ArrayList<String> getPaths(String table,int propNum){
 		if(propNum==2) {
 			return null;

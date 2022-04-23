@@ -91,17 +91,14 @@
 		}
 		function openPage(pageName, elmnt){
 			var i, tabcontent, tablinks;
-			// Hide all tabs
 			tabcontent = document.getElementsByClassName("tabcontent");
 			for (i = 0; i < tabcontent.length; i++) {
 				tabcontent[i].style.display = "none";
 			}
-			// Remove the background color of all buttons
 			tablinks = document.getElementsByClassName("tablink");
 			for (i = 0; i < tablinks.length; i++) {
 				tablinks[i].style.backgroundColor = "";
 			}
-			// Show requested tab and color the button pressed
 			document.getElementById(pageName).style.display = "block";
 			elmnt.style.backgroundColor = '#54ac39';
 		}
