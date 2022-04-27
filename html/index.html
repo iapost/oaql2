@@ -27,8 +27,25 @@
 	  background-color: #54ac39;
 	  display: none;
 	  padding: 100px 20px;
-	  height: 100%;
 	  text-align:center;
+	}
+
+	.navbar {
+	  overflow: hidden;
+	  background-color: #333;
+	  position: fixed;
+	  bottom: 0;
+	  width: 100%;
+	}
+
+	.navbar a {
+	  float: left;
+	  display: block;
+	  color: #f2f2f2;
+	  text-align: center;
+	  padding: 14px 16px;
+	  text-decoration: none;
+	  font-size: 17px;
 	}
   </style>
  </head>
@@ -67,6 +84,9 @@
 		</div>
 		<textarea id="txtIdResult" type="text" readonly="readonly" style="height: 70%; width: 50%;" placeholder="Result"></textarea>
 	</div>
+	<div class="navbar">
+        <a href="http://www.intelligence.tuc.gr/">Intelligent Systems Laboratory</a>
+    </div>
 	<script>
 		function insertDescription(){
 			enableDisable("btnInsert","txtInsert",true);
