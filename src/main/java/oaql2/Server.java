@@ -86,20 +86,24 @@ public class Server implements HttpHandler{
 	 */
 	public void handle(HttpExchange ex){
 		try {
-			if(ex.getRequestURI().getPath().equals(insertDescriptionPath)) {
-				new DescriptionParser().handleExchange(mongoUrl, ex);
-			}else if(ex.getRequestURI().getPath().equals(queryPath)){
-				parseQuery(ex);
-			}else if(ex.getRequestURI().getPath().startsWith(descriptionPath)){
-				getOriginalDescription(ex);
-			}else if(ex.getRequestURI().getPath().equals("/")) {
-				ex.getResponseHeaders().put("Content-Type",Arrays.asList("text/html; charset=UTF-8"));
-				ex.sendResponseHeaders(200,0);
-				Files.copy(htmlIndex, ex.getResponseBody());
-				ex.close();
-			}else {
-				ex.sendResponseHeaders(404,-1);
-				ex.close();
+			try{
+				if(ex.getRequestURI().getPath().equals(insertDescriptionPath)) {
+					new DescriptionParser().handleExchange(mongoUrl, ex);
+				}else if(ex.getRequestURI().getPath().equals(queryPath)){
+					parseQuery(ex);
+				}else if(ex.getRequestURI().getPath().startsWith(descriptionPath)){
+					getOriginalDescription(ex);
+				}else if(ex.getRequestURI().getPath().equals("/")) {
+					ex.getResponseHeaders().put("Content-Type",Arrays.asList("text/html; charset=UTF-8"));
+					ex.sendResponseHeaders(200,0);
+					Files.copy(htmlIndex, ex.getResponseBody());
+					ex.close();
+				}else {
+					ex.sendResponseHeaders(404,-1);
+					ex.close();
+				}
+			}catch(Error e){
+				throw new Exception("Error: possibly ran out of heap space: "+e.getMessage());
 			}
 		}catch (Exception e) {
 			//some error occured, return status code 400 and error message in response body

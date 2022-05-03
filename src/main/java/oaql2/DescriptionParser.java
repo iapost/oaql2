@@ -35,8 +35,14 @@ public class DescriptionParser{
 		String desc=s.useDelimiter("\\Z").next();
 		s.close();
 		
-		//parse description to get metadata object
-		JSONObject obj = this.parse(desc);
+		//parse description to get metadata object, catch any errors
+		JSONObject obj;
+		try{
+            obj = this.parse(desc);
+        }
+        catch(Error e){
+            throw new Exception("Error: possible cyclic references or too large description: "+e.getMessage());
+        }
 		
 		//insert description into "originalDescriptions" collection of Mongo, get generated id and put it in metadata object
 		MongoClient cli =MongoClients.create(mongoUrl);

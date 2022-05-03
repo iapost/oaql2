@@ -25,7 +25,7 @@ The server listens for HTTP requests on port 80 of the host machine. The availab
 If the server encounters an error, it will respond with a status code of 400 and an error message in the response body. 
 
 #### Other files ####
-For convenience, the *utils* folder contains a zip file with 100 OpenAPI descriptions taken from Swaggerhub. It also contains a bash script to automatically send these descriptions to the service. To use the script, execute the following command inside *utils* directory:
+For convenience, the *utils* folder contains a zip file with 1000 OpenAPI descriptions taken from Swaggerhub. It also contains a bash script to automatically send these descriptions to the service. To use the script, execute the following command inside *utils* directory:
 
     $ ./insert.sh <hostname> 
 
