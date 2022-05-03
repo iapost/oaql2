@@ -64,7 +64,14 @@
 	</div>
 	<div id="tab2" class="tabcontent" style="text-align:center;">
 		<div style="display: inline-block; width: 40%;">
-			<textarea id="txtQuery" type="text" style="height: 70%; width:100%" placeholder="Enter OAQL2 query"></textarea>
+			<textarea id="txtQuery" type="text" style="height: 70%; width:100%" placeholder='Enter OAQL2 query
+
+SELECT [DISTINCT] <field> [AS <alias>], <field>, ...
+FROM <table> [AS <alias>]
+  JOIN <table> [AS <alias>] ON <table>
+  JOIN ...
+WHERE <field> = "..."
+ORDER BY <field> ASC, <field> DESC'></textarea>
 		</div>
 		<div style="display: inline-block; width: 40%;">
 			<textarea id="txtQueryResult" type="text" readonly="readonly" style="height: 70%; width:100%" placeholder="Results"></textarea>
