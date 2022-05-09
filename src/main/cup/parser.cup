@@ -77,21 +77,17 @@ action code {:
 		if(hasDistinct){
 			pipeline.add(new Document("$group",new Document("_id",projection)));
 			pipeline.add(new Document("$replaceRoot",new Document("newRoot","$_id")));
-			if(orderby!=null){
-				pipeline.add(new Document("$sort",translateOrderBy(orderby,projection)));
-			}
-			return pipeline;
+		}else{
+			pipeline.add(new Document("$project",new Document(projection).append("_id",0)));
 		}
-		if(orderby!=null) {
-			pipeline.add(new Document("$sort",orderby));
+		if(orderby!=null){
+			pipeline.add(new Document("$sort",translateOrderBy(orderby,projection)));
 		}
-		pipeline.add(new Document("$project",projection.append("_id",0)));
-
 		return pipeline; 
 	}
 
 	/*
-	* Translates field names of sort stage if DISTINCT keyword was specified so that it can be placed after group stage
+	* Translates field names of sort stage so that it can be placed after group/project stage
 	*/
 	public static Document translateOrderBy(Document orderby, Document projection) throws Exception{
 		Document finalOrderby=new Document();
@@ -104,7 +100,7 @@ action code {:
 		for(Entry<String,Object> e : orderby.entrySet()){
 			String tmp=e.getKey();
 			if(!projection.containsKey(tmp.substring(0,tmp.indexOf(".")))){
-				throw new Exception("ORDER BY conflicts with DISTINCT");
+				throw new Exception("Can only sort by fields specified in SELECT clause");
 			}
 			finalOrderby.put(tmp,e.getValue());
 		}
