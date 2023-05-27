@@ -1,7 +1,7 @@
 OpenAPI Query Language 2 Service
 ================================
 #### A service for querying OpenAPI documents ####
-This is an implementation of a web service able to store OpenAPI documents and execute OAQL2 (OpenAPI Query Language 2) queries on them. The web service consists of a Java server and a MongoDB database.
+This is an implementation of a web service able to store OpenAPI documents and execute OpenAPI Query Language 2 (OAQL2) queries on them. The web service consists of a Java server and a MongoDB database.
 
 #### Installation ####
 You need to have Docker and Docker Compose installed.
@@ -33,4 +33,3 @@ For convenience, the *utils* folder contains a zip file with 1000 OpenAPI descri
 
 #### Notes ####
 - Currently, only OpenAPI documents conforming to OpenAPI Specification v3.1.0 are supported
-- This web service was implemented as part of a diploma thesis in the School of Electrical & Computer Engineering of the Technical University of Crete
