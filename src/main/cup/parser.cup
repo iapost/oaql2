@@ -1,4 +1,7 @@
+/** @file Parser.java */
+
 package oaql2;
+
 import org.bson.Document;
 import java.util.HashMap;
 import java.util.ArrayList;
@@ -6,50 +9,70 @@ import java.util.List;
 import java.util.Map.Entry;
 
 parser code {:
+
+	/** List of tables given in SELECT with ".*" suffix */
 	ArrayList<String> exclusionList;
+
+	/**
+	 * This is called to begin parsing of a query
+	 * 
+	 * @param exclusionList an object created by the caller of the parser to be used while parsing
+	 * @return the produced MongoDB pipeline
+	 * 
+	 */
 	public ArrayList<Document> getPipeline(ArrayList<String> exclusionList) throws Exception{
-		this.exclusionList=exclusionList;
+		this.exclusionList = exclusionList;
 		return (ArrayList<Document>)this.parse().value;
 	}
-	public void report_fatal_error(String message,Object info) throws Exception{
+
+	/**
+	 * Overrides the default method for error handling
+	 */
+	public void report_fatal_error(String message, Object info) throws Exception{
       	done_parsing();
       	throw new Exception("Error while parsing the query");
     }
 :};
 
 action code {:
-	//remembers if the query contains the DISTINCT keyword in SELECT
-	boolean hasDistinct=false;
+	/** Remembers if the query contains the DISTINCT keyword in SELECT */
+	boolean hasDistinct = false;
 
-	//used to find quickly tree node with specific table name or alias
-	HashMap<String,TreeNode> treeMap=new HashMap<String,TreeNode>();
+	/** Used to find quickly tree node with specific table name or alias */
+	HashMap<String,TreeNode> treeMap = new HashMap<String,TreeNode>();
 
-	//root of tree
+	/** Root of tree */
 	TreeNode treeHead;
 
-	//list of tables given in SELECT with ".*" suffix
+	/** List of tables given in SELECT with ".*" suffix */
 	ArrayList<String> exclusionList;
 
-	/*
-	* Returns the MongoDB pipeline
-	*/
+	/**
+	 * Returns the MongoDB pipeline
+	 * 
+	 * @param projection an object representing the fields to be shown in the result
+	 * @param condition an object representing the filtering conditions
+	 * @param orderby an object representing the sorting requirements
+	 * @return the MongoDB pipeline
+	 * 
+	 */
 	public ArrayList<Document> constructPipeline(Document projection, Document condition,  Document orderby) throws Exception{
-		ArrayList<Document> pipeline=new ArrayList<Document>();
+		ArrayList<Document> pipeline = new ArrayList<Document>();
 
 		//Add match stage for Part 1
-		if(condition!=null) {
+		if(condition != null) {
 			treeHead.resolveFullPath();
-			ArrayList<Document> condList=new ArrayList<Document>();
+			ArrayList<Document> condList = new ArrayList<Document>();
 			for(String s : Model.tables.get(treeHead.table).paths) {
-				Document tmp=translateInitialMatch(condition,s);
-				if(tmp!=null && tmp.size()>0) {
+				Document tmp = translateInitialMatch(condition, s);
+				if(tmp != null && tmp.size() > 0) {
 					condList.add(tmp);
 				}
 			}
-			if(condList.size()==1) {
-				pipeline.add(new Document("$match",condList.get(0)));
-			}else if(condList.size()>0){
-				pipeline.add(new Document("$match",new Document("$or",condList)));
+			if(condList.size() == 1) {
+				pipeline.add(new Document("$match", condList.get(0)));
+			}else if(condList.size() > 0){
+				pipeline.add(new Document("$match", new Document("$or", condList)));
 			}
 		}
 
@@ -57,84 +80,94 @@ action code {:
 		pipeline.addAll(getUnwinds());
 
 		//Add match stage for Part 3
-		if(condition!=null) {
-			pipeline.add(new Document("$match",condition));
+		if(condition != null) {
+			pipeline.add(new Document("$match", condition));
 		}
 
 		//Add stages for Part 4
-		if(exclusionList.size()>0) {
-			Document exclProjection=new Document();
+		if(exclusionList.size() > 0) {
+			Document exclProjection = new Document();
 			for(String s : exclusionList) {
-				Document tmp=Model.tables.get(treeMap.get(s).table).contains;
-				if(tmp!=null) {
+				Document tmp = Model.tables.get(treeMap.get(s).table).contains;
+				if(tmp != null) {
 					exclProjection.append(treeMap.get(s).alias, tmp);
 				}
 			}
-			if(exclProjection.size()>0) {
-				pipeline.add(new Document("$project",exclProjection));
+			if(exclProjection.size() > 0) {
+				pipeline.add(new Document("$project", exclProjection));
 			}
 		}
 		if(hasDistinct){
-			pipeline.add(new Document("$group",new Document("_id",projection)));
-			pipeline.add(new Document("$replaceRoot",new Document("newRoot","$_id")));
+			pipeline.add(new Document("$group", new Document("_id", projection)));
+			pipeline.add(new Document("$replaceRoot", new Document("newRoot", "$_id")));
 		}else{
-			pipeline.add(new Document("$project",new Document(projection).append("_id",0)));
+			pipeline.add(new Document("$project", new Document(projection).append("_id", 0)));
 		}
-		if(orderby!=null){
-			pipeline.add(new Document("$sort",translateOrderBy(orderby,projection)));
+		if(orderby != null){
+			pipeline.add(new Document("$sort", translateOrderBy(orderby, projection)));
 		}
 		return pipeline; 
 	}
 
-	/*
-	* Translates field names of sort stage so that it can be placed after group/project stage
-	*/
+	/**
+	 * Translates field names of sort stage so that it can be placed after group/project stage
+	 * 
+	 * @param orderby the object for sorting initially produced by the parser
+	 * @param projection an object representing the fields to be shown in the query result
+	 * @return the translated object for sorting to be added to the pipeline
+	 * 
+	 */
 	public static Document translateOrderBy(Document orderby, Document projection) throws Exception{
-		Document finalOrderby=new Document();
-		for(Entry<String,Object> e : projection.entrySet()) {
-			String tmp=((String)e.getValue()).substring(1);
+		Document finalOrderby = new Document();
+		for(Entry<String, Object> e : projection.entrySet()) {
+			String tmp = ((String)e.getValue()).substring(1);
 			if(orderby.containsKey(tmp)) {
-				finalOrderby.put(e.getKey(),orderby.remove(tmp));
+				finalOrderby.put(e.getKey(), orderby.remove(tmp));
 			}
 		}
-		for(Entry<String,Object> e : orderby.entrySet()){
-			String tmp=e.getKey();
-			if(!projection.containsKey(tmp.substring(0,tmp.indexOf(".")))){
+		for(Entry<String, Object> e : orderby.entrySet()){
+			String tmp = e.getKey();
+			if(!projection.containsKey(tmp.substring(0, tmp.indexOf(".")))){
 				throw new Exception("Can only sort by fields specified in SELECT clause");
 			}
-			finalOrderby.put(tmp,e.getValue());
+			finalOrderby.put(tmp, e.getValue());
 		}
 		return finalOrderby;
 	}
 
-	/*
-	* Translates match stage from Part 3 to produce match stage for Part 1
-	*/
+	/**
+	 * Translates match stage from Part 3 to produce match stage for Part 1
+	 * 
+	 * @param c an object representing the filtering conditions
+	 * @param prefix the sequence of parent tables leading to the top table of the query
+	 * @return the translated object to be used in the beginning of the pipeline
+	 * 
+	 */
 	public Document translateInitialMatch(Document c, String prefix) throws Exception{
-		String k=c.keySet().iterator().next();
+		String k = c.keySet().iterator().next();
 		if(k.equals("$expr")) {
 			return null;
 		}
 		if(k.equals("$and")) {
-			List<Document> list=c.getList(k, Document.class);
-			ArrayList<Document> newlist=new ArrayList<Document>();
+			List<Document> list = c.getList(k, Document.class);
+			ArrayList<Document> newlist = new ArrayList<Document>();
 			for(Document d : list) {
-				Document tmp=translateInitialMatch(d,prefix);
-				if(tmp!=null && tmp.size()>0){
+				Document tmp = translateInitialMatch(d, prefix);
+				if(tmp != null && tmp.size() > 0){
 					newlist.add(tmp);
 				}
 			}
-			if(newlist.size()>0) {
+			if(newlist.size() > 0) {
 				return new Document(k, newlist);
 			}
 			return new Document();
 		}
 		if(k.equals("$or")) {
-			List<Document> list=c.getList(k, Document.class);
-			ArrayList<Document> newlist=new ArrayList<Document>();
+			List<Document> list = c.getList(k, Document.class);
+			ArrayList<Document> newlist = new ArrayList<Document>();
 			for(Document d : list) {
-				Document tmp=translateInitialMatch(d,prefix);
-				if(tmp==null || tmp.size()==0){
+				Document tmp = translateInitialMatch(d, prefix);
+				if(tmp == null || tmp.size() == 0){
 					return null;
 				}
 				newlist.add(tmp);
@@ -142,82 +175,94 @@ action code {:
 			return new Document(k, newlist);
 		}
 		if(k.startsWith("$")){
-			Document tmp=translateInitialMatch(c.get(k,Document.class),prefix);
-			if(tmp==null){
+			Document tmp = translateInitialMatch(c.get(k, Document.class), prefix);
+			if(tmp == null){
 				return null;
 			}
-			if(tmp.size()>0) {
+			if(tmp.size() > 0) {
 				return new Document(k, tmp);
 			}
 			return new Document();
 		}
-		int dot=k.indexOf(".");
-		return new Document(prefix+treeMap.get(k.substring(0,dot)).fullpath+k.substring(dot),c.get(k));
+		int dot = k.indexOf(".");
+		return new Document(prefix + treeMap.get(k.substring(0, dot)).fullpath + k.substring(dot), c.get(k));
 	}
 
-	/*
-	* Gets addFields and unwind stages for each node of the tree recursively
-	*/
+	/**
+	 * Gets addFields and unwind stages for each node of the tree recursively
+	 * 
+	 * @param node the current node
+	 * @return a list of pipeline stages
+	 * 
+	 */
 	public static ArrayList<Document> getUnwindsRecursive(TreeNode node){
-		if(node.children.size()==0) {
+		if(node.children.size() == 0) {
 			return null;
 		}
-		ArrayList<Document> result=new ArrayList<Document>();
-		Document childProjections=new Document();
-		result.add(new Document("$addFields",childProjections));
-		for(TreeNode t: node.children) {
-			childProjections.append(t.alias, "$"+node.alias+"."+t.table); 
-			result.add(new Document("$unwind",new Document("path","$"+t.alias).append("preserveNullAndEmptyArrays", true)));
-			ArrayList<Document> tmp=getUnwindsRecursive(t);
-			if(tmp!=null) {
+		ArrayList<Document> result = new ArrayList<Document>();
+		Document childProjections = new Document();
+		result.add(new Document("$addFields", childProjections));
+		for(TreeNode t : node.children) {
+			childProjections.append(t.alias, "$" + node.alias + "." + t.table); 
+			result.add(new Document("$unwind", new Document("path", "$" + t.alias).append("preserveNullAndEmptyArrays", true)));
+			ArrayList<Document> tmp = getUnwindsRecursive(t);
+			if(tmp != null) {
 				result.addAll(tmp);
 			}
 		}
 		return result;
 	}
 
-	/*
-	* Gets project, addFields and unwind stages for Part 2
-	*/
+	/**
+	 * Gets project, addFields and unwind stages for Part 2
+	 * 
+	 * @return a list of pipeline stages
+	 * 
+	 */
 	public ArrayList<Document> getUnwinds(){
-		ArrayList<Document> result=new ArrayList<Document>();
-		result.add(new Document("$project",new Document(treeHead.alias,Model.tables.get(treeHead.table).pathsForConcat)));
-		for(int i=0; i<Model.tables.get(treeHead.table).unwindsNum; i++){
-			result.add(new Document("$unwind","$"+treeHead.alias));
+		ArrayList<Document> result = new ArrayList<Document>();
+		result.add(new Document("$project", new Document(treeHead.alias, Model.tables.get(treeHead.table).pathsForConcat)));
+		for(int i = 0; i < Model.tables.get(treeHead.table).unwindsNum; i++){
+			result.add(new Document("$unwind", "$" + treeHead.alias));
 		}
 		if(treeHead.table.equals("Property")){
-			result.add(new Document("$project",new Document(treeHead.alias,new Document("$function",new Document("body",Model.propFunc).append("args",List.<String>of("$"+treeHead.alias)).append("lang","js")))));
-			result.add(new Document("$unwind","$"+treeHead.alias));
+			result.add(new Document("$project", new Document(treeHead.alias, new Document("$function", new Document("body", Model.propFunc).append("args", List.<String>of("$" + treeHead.alias)).append("lang", "js")))));
+			result.add(new Document("$unwind", "$" + treeHead.alias));
 		}else if(treeHead.table.equals("Item")){
-			result.add(new Document("$project",new Document(treeHead.alias,new Document("$function",new Document("body",Model.itemFunc).append("args",List.<String>of("$"+treeHead.alias)).append("lang","js")))));
-			result.add(new Document("$unwind","$"+treeHead.alias));
+			result.add(new Document("$project", new Document(treeHead.alias, new Document("$function", new Document("body", Model.itemFunc).append("args", List.<String>of("$" + treeHead.alias)).append("lang", "js")))));
+			result.add(new Document("$unwind", "$" + treeHead.alias));
 		}
-		ArrayList<Document> tmp=getUnwindsRecursive(treeHead);
-		if(tmp!=null) {
+		ArrayList<Document> tmp = getUnwindsRecursive(treeHead);
+		if(tmp != null) {
 			result.addAll(tmp);
 		}
 		return result;
 	}
 
-	/*
-	* Checks table name and alias for errors and adds it to the tree
-	*/
+	/**
+	 * Checks table name and alias for errors and adds it to the tree
+	 * 
+	 * @param tableName the name of the table
+	 * @param alias the alias of the table if specified or null otherwise
+	 * @return the tree node created for the table
+	 * 
+	 */
 	public TreeNode checkFromTable(String tableName, String alias) throws Exception{
 		if(!Model.tables.containsKey(tableName)) {
-			throw new Exception("Table not recognised: "+tableName);
+			throw new Exception("Table not recognised: " + tableName);
 		}
-		TreeNode node=new TreeNode(alias,tableName);
-		if(alias!=null){
+		TreeNode node = new TreeNode(alias, tableName);
+		if(alias != null){
 			if(Model.tables.containsKey(alias)) {
-				throw new Exception("Table alias cannot be a table name: "+alias);
+				throw new Exception("Table alias cannot be a table name: " + alias);
 			}
-			if(treeMap.put(alias, node)!=null){
-				throw new Exception("Duplicate alias in FROM: "+alias);
+			if(treeMap.put(alias, node) != null){
+				throw new Exception("Duplicate alias in FROM: " + alias);
 			}
 		} 
 		if(treeMap.containsKey(tableName)) {
-			if(alias==null) {
-				throw new Exception("Duplicate table: "+tableName+". You should specify an alias");
+			if(alias == null) {
+				throw new Exception("Duplicate table: " + tableName + ". You should specify an alias");
 			}
 			treeMap.put(tableName, null);
 		}else {
@@ -226,269 +271,332 @@ action code {:
 		return node;
 	}
 
-	/*
-	* Checks if the table can be joined as specified in the query and adds a relationship between the nodes of the two tables
-	*/
+	/**
+	 * Checks if the table can be joined as specified in the query and adds a relationship between the nodes of the two tables
+	 * 
+	 * @param tableName the name of the new table
+	 * @param alias the alias of the new table if specified or null otherwise
+	 * @param joinTable the table that the new table will be joined with
+	 * 
+	 */
 	public void newFromTable(String tableName, String alias, String joinTable) throws Exception{
-		TreeNode node=checkFromTable(tableName,alias);
-		if(joinTable==null) {
-			treeHead=node;
+		TreeNode node = checkFromTable(tableName, alias);
+		if(joinTable == null) {
+			treeHead = node;
 			return;
 		}
-		TreeNode joinNode=treeMap.get(joinTable);
-		if(joinNode==null) {
-			throw new Exception("Table not recognised or multiple tables with that name exist: "+joinTable);
+		TreeNode joinNode = treeMap.get(joinTable);
+		if(joinNode == null) {
+			throw new Exception("Table not recognised or multiple tables with that name exist: " + joinTable);
 		}
 		if((node.table.equals("Item") || node.table.equals("Property")) && (joinNode.table.equals("Item") || joinNode.table.equals("Property"))) {
 			throw new Exception("To join a Property or Item table with another Property or Item table you need to specify the full condition at ON");
 		}
-		if(Model.tablePairs.contains(joinNode.table+"."+tableName)) {
-			node.parent=joinNode;
+		if(Model.tablePairs.contains(joinNode.table + "." + tableName)) {
+			node.parent = joinNode;
 			joinNode.children.add(node);
-		}else if(Model.tablePairs.contains(tableName+"."+joinNode.table)) {
-			if(joinNode.parent!=null) {
-				throw new Exception("Cannot join both "+joinNode.parent.table+" and "+tableName+" with the same instance of table "+joinNode.table);
+		}else if(Model.tablePairs.contains(tableName + "." + joinNode.table)) {
+			if(joinNode.parent != null) {
+				throw new Exception("Cannot join both " + joinNode.parent.table + " and " + tableName + " with the same instance of table " + joinNode.table);
 			}
 			node.children.add(joinNode);
-			joinNode.parent=node;
-			treeHead=node;
+			joinNode.parent = node;
+			treeHead = node;
 		}else { 
-			throw new Exception("Cannot join tables "+tableName+" and "+joinNode.table);
+			throw new Exception("Cannot join tables " + tableName + " and " + joinNode.table);
 		}
 	}
 
-	/*
-	* Same as newFromTable above for when joining a Property or Item with another Property or Item
-	*/
+	/**
+	 * Same as newFromTable above, used only to join a Property or Item with another Property or Item
+	 * 
+	 * @param tableName the name of the new table
+	 * @param alias the alias of the new table if specified or null otherwise
+	 * @param parentTable the name or alias of the parent table
+	 * @param field the field used to make the join
+	 * @param childTable the name or alias of the child table
+	 * 
+	 */
 	public void newFromTable(String tableName, String alias, String parentTable, String field, String childTable) throws Exception {
-		checkFromTable(tableName,alias);
-		TreeNode parentNode=treeMap.get(parentTable);
-		if(parentNode==null) {
-			throw new Exception("Table not recognised or multiple tables with that name exist: "+parentTable);
+		checkFromTable(tableName, alias);
+		TreeNode parentNode = treeMap.get(parentTable);
+		if(parentNode == null) {
+			throw new Exception("Table not recognised or multiple tables with that name exist: " + parentTable);
 		}
-		TreeNode childNode=treeMap.get(childTable);
-		if(childNode==null) {
-			throw new Exception("Table not recognised or multiple tables with that name exist: "+childTable);
+		TreeNode childNode = treeMap.get(childTable);
+		if(childNode == null) {
+			throw new Exception("Table not recognised or multiple tables with that name exist: " + childTable);
 		}
-		if(childNode.parent!=null) {
-			throw new Exception("Cannot join both "+parentNode.table+" and "+childNode.parent.table+" as parents of the same instance of table "+childNode.table);
+		if(childNode.parent != null) {
+			throw new Exception("Cannot join both " + parentNode.table + " and " + childNode.parent.table + " as parents of the same instance of table " + childNode.table);
 		}
 		if((childNode.table.equals("Item") && !field.equals("item")) || (childNode.table.equals("Property") && !field.equals("property"))) {
-			throw new Exception("Cannot use "+field+" with "+childNode.table);
+			throw new Exception("Cannot use " + field + " with " + childNode.table);
 		}
 		if((!childNode.table.equals("Item") && !childNode.table.equals("Property")) || (!parentNode.table.equals("Item") && !parentNode.table.equals("Property"))) {
 			throw new Exception("This syntax must be used only when joining a Property or Item table with another Property or Item");
 		}
-		childNode.parent=parentNode;
+		childNode.parent = parentNode;
 		parentNode.children.add(childNode);
 	}
 
-	/*
-	* Translates condition that compares a field with a string value
-	*/ 
-	public Document checkField(String str,String operator, String value) throws Exception{
-		String result=translateField(str,Model.STR_TYPE);
-		int dot=str.indexOf(".");
-		String tableName=treeMap.get(str.substring(0,dot)).table;
-		String fieldName=str.substring(dot+1);
-		if(operator.equals("$eq") && (tableName.equals("Schema")||tableName.equals("Item")||tableName.equals("Property"))){
+	/**
+	 * Translates condition that compares a field with a string value
+	 * 
+	 * @param str the field name
+	 * @param operator the comparison operator
+	 * @param value the value to make the comparison with
+	 * @return an object representing the filtering condition
+	 * 
+	 */ 
+	public Document checkField(String str, String operator, String value) throws Exception{
+		String result = translateField(str, Model.STR_TYPE);
+		int dot = str.indexOf(".");
+		String tableName = treeMap.get(str.substring(0, dot)).table;
+		String fieldName = str.substring(dot + 1);
+		if(operator.equals("$eq") && (tableName.equals("Schema") || tableName.equals("Item") || tableName.equals("Property"))){
 			if(fieldName.equals("x-refersTo")){
 				Document tmpDoc=new Document("$in",Server.getSubclassesInModel(value));
-				return new Document("$or",List.<Document>of(new Document(result, tmpDoc),new Document(result.replaceFirst("x-refersTo$","x-kindOf"), tmpDoc)));
+				return new Document("$or", List.<Document>of(new Document(result, tmpDoc), new Document(result.replaceFirst("x-refersTo$", "x-kindOf"), tmpDoc)));
 			}else if(fieldName.equals("x-kindOf")){
-				ArrayList<String> fullArr=Server.getSubclassesInModel(value);
-				ArrayList<String> smallArr=new ArrayList<String>(fullArr);
+				ArrayList<String> fullArr = Server.getSubclassesInModel(value);
+				ArrayList<String> smallArr = new ArrayList<String>(fullArr);
 				smallArr.remove(value);
-				return new Document("$or",List.<Document>of(new Document(result,new Document("$in",fullArr)),new Document(result.replaceFirst("x-kindOf$","x-refersTo"), new Document("$in",smallArr))));
+				return new Document("$or", List.<Document>of(new Document(result, new Document("$in", fullArr)), new Document(result.replaceFirst("x-kindOf$", "x-refersTo"), new Document("$in", smallArr))));
 			}
-		}else if(operator.equals("$eq") && (tableName.equals("Request")||tableName.equals("Webhook")||tableName.equals("Callback")) && fieldName.equals("x-operationType")){
-			return new Document(result, new Document("$in",Server.getSubclassesInModel(value)));
+		}else if(operator.equals("$eq") && (tableName.equals("Request") || tableName.equals("Webhook") || tableName.equals("Callback")) && fieldName.equals("x-operationType")){
+			return new Document(result, new Document("$in", Server.getSubclassesInModel(value)));
 		}else if(operator.equals("$eq") && fieldName.equals("contentType")){
-			ArrayList<String> valArr=new ArrayList<String>();
+			ArrayList<String> valArr = new ArrayList<String>();
 			valArr.add(value);
-			if(!value.substring(value.indexOf("/")+1).equals("*")){
-				valArr.add(value.substring(0,value.indexOf("/"))+"/*");
+			if(!value.substring(value.indexOf("/") + 1).equals("*")){
+				valArr.add(value.substring(0, value.indexOf("/")) + "/*");
 			}
 			valArr.add("*/*");
-			return new Document(result, new Document("$in",valArr));
+			return new Document(result, new Document("$in", valArr));
 		}
-		return new Document(result,new Document(operator,value)); 
+		return new Document(result,new Document(operator, value)); 
 	}
 
-	/*
-	* Translates condition that compares a field with a boolean value
-	*/
+	/**
+	 * Translates condition that compares a field with a boolean value
+	 * 
+	 * @param str the field name
+	 * @param operator the comparison operator
+	 * @param value the value to make the comparison with
+	 * @return an object representing the filtering condition
+	 * 
+	 */
 	public Document checkField(String str, String operator, boolean value) throws Exception{
 		if(operator.equals("$ne")){
-			value=!value;
+			value = !value;
 		}else if(!operator.equals("$eq")){
 			throw new Exception("Only = and <> operators are supported for booleans");
 		}
-		return new Document(translateField(str,Model.BOOL_TYPE),value); 
+		return new Document(translateField(str, Model.BOOL_TYPE), value); 
 	}
 
-	/*
-	* Translates condition that compares a field with a numeric value
-	*/
+	/**
+	 * Translates condition that compares a field with a numeric value
+	 * 
+	 * @param str the field name
+	 * @param operator the comparison operator
+	 * @param value the value to make the comparison with
+	 * @return an object representing the filtering condition
+	 * 
+	 */
 	public Document checkField(String str, String operator, double value) throws Exception{
-		int dot=str.indexOf(".");
-		String tableName=treeMap.get(str.substring(0,dot)).table;
-		String fieldName=str.substring(dot+1);
+		int dot = str.indexOf(".");
+		String tableName = treeMap.get(str.substring(0, dot)).table;
+		String fieldName = str.substring(dot + 1);
 		if(tableName.equals("Response") && fieldName.equals("statusCode")){
-			return statusCodeCondition(translateField(str,Model.NUM_TYPE),operator,value);
+			return statusCodeCondition(translateField(str, Model.NUM_TYPE), operator, value);
 		}
-		return new Document(translateField(str,Model.NUM_TYPE), new Document(operator, value));
+		return new Document(translateField(str, Model.NUM_TYPE), new Document(operator, value));
 	} 
 
-	/*
-	* Translates condition that uses the LIKE operator
-	*/
+	/**
+	 * Translates condition that uses the LIKE operator
+	 * 
+	 * @param field the field name
+	 * @param regex the value to make the comparison with
+	 * @return an object representing the filtering condition
+	 * 
+	 */
 	public Document parseLike(String field, String regex) throws Exception{
-		regex="^"+regex.replaceAll("%",".*").replaceAll("_",".")+"$";
+		regex = "^" + regex.replaceAll("%", ".*").replaceAll("_", ".") + "$";
 		if(regex.startsWith("^.*")) {
-			regex=regex.substring(3);
+			regex = regex.substring(3);
 		}
 		if(regex.endsWith(".*$")) {
-			regex=regex.substring(0,regex.length()-3);
+			regex = regex.substring(0, regex.length() - 3);
 		}
-		return new Document(translateField(field,Model.STR_TYPE), new Document("$regex",regex).append("$options", "s"));
+		return new Document(translateField(field, Model.STR_TYPE), new Document("$regex", regex).append("$options", "s"));
 	}
 
-	/*
-	* Finds tree node corresponding to table name
-	*/
+	/**
+	 * Finds tree node corresponding to table name
+	 * 
+	 * @param table the table name or alias
+	 * @return the tree node for that table
+	 * 
+	 */
 	public TreeNode translateTable(String table)throws Exception{
 		if(!treeMap.containsKey(table)) {
-			throw new Exception("Table "+table+" not included in FROM clause");
+			throw new Exception("Table " + table + " not included in FROM clause");
 		}
-		TreeNode tmp=treeMap.get(table);
-		if(tmp==null) {
-			throw new Exception("Multiple instances of table "+table+", use its alias to specify which you refer to");
+		TreeNode tmp = treeMap.get(table);
+		if(tmp == null) {
+			throw new Exception("Multiple instances of table " + table + ", use its alias to specify which you refer to");
 		}
 		return tmp;
 	}
 
-	/*
-	* Checks field's data type and translates it to <table_alias>.<field_name> 
-	*/
+	/**
+	 * Validates field's data type and translates it to "table_alias.field_name"
+	 * 
+	 * @param str the field name
+	 * @param givenType the field's data type as inferred from the query
+	 * @return the translated field name
+	 * 
+	 */
 	public String translateField(String str, char givenType) throws Exception{
-		int dot=str.indexOf('.');
-		String field=str.substring(dot+1);
-		TreeNode tmp=translateTable(str.substring(0,dot));
-		String table=tmp.table;
-		Character type=Model.tableFields.get(table+"."+field);
-		if(type==null) {
+		int dot = str.indexOf('.');
+		String field = str.substring(dot + 1);
+		TreeNode tmp = translateTable(str.substring(0, dot));
+		String table = tmp.table;
+		Character type = Model.tableFields.get(table + "." + field);
+		if(type == null) {
 			if(field.startsWith("x-") || table.equals("Schema") || table.equals("Item") || table.equals("Property")){
-				type=Model.ANY_TYPE;
+				type = Model.ANY_TYPE;
 			}else{
-				throw new Exception("Field '"+field+"' not in table '"+table+"'");
+				throw new Exception("Field '" + field + "' not in table '" + table + "'");
 			}
 		}
-		if((givenType&type)==0) {
-			throw new Exception("Wrong type for field: "+field);
+		if((givenType & type) == 0) {
+			throw new Exception("Wrong type for field: " + field);
 		}
-		return tmp.alias+"."+field;
+		return tmp.alias + "." + field;
 	}	
 
-	/*
-	* Used for SELECT * queries
-	*/
+	/**
+	 * Used for SELECT * queries
+	 * 
+	 * @return an object representing all fields from all tables in FROM clause
+	 * 
+	 */
 	public Document parseStar() {
-		Document result=new Document();
+		Document result = new Document();
 		for(TreeNode t : treeMap.values()) {
-			if(t==null || result.containsKey(t.alias)) {
+			if(t == null || result.containsKey(t.alias)) {
 				continue;
 			}
-			result.append(t.alias,"$"+t.alias);
+			result.append(t.alias, "$" + t.alias);
 			exclusionList.add(t.alias); 
 		}
 		return result;
 	}
 
-	/*
-	* Returns data type of field
-	*/
+	/**
+	 * Returns data type of field
+	 * 
+	 * @param str the field name
+	 * @return the data type of the field
+	 * 
+	 */
 	public Character typeOfField(String str) throws Exception{
-		int dot=str.indexOf('.');
-		String field=str.substring(dot+1);
-		String table=treeMap.get(str.substring(0,dot)).table;
-		if(table.equals("Schema")||table.equals("Item")||table.equals("Property")){
+		int dot = str.indexOf('.');
+		String field = str.substring(dot + 1);
+		String table = treeMap.get(str.substring(0, dot)).table;
+		if(table.equals("Schema") || table.equals("Item") || table.equals("Property")){
 			return null;
 		}
-		return Model.tableFields.get(table+"."+field);
+		return Model.tableFields.get(table + "." + field);
 	}
 
-	/*
-	* Translates condition
-	* <field> = <field>
-	* or
-	* <field> IN <field>
-	*/
+	/**
+	 * Translates condition
+	 *  field = field
+	 * or
+	 *  field IN field
+	 * 
+	 * @param field1 the first field name
+	 * @param field2 the second field name
+	 * @param op the operator
+	 * @return an object representing the filtering condition
+	 * 
+	 */
 	public Document checkFieldToField(String field1, String field2, String op)throws Exception{
-		String a=translateField(field1,Model.ANY_TYPE);
-		String b=translateField(field2,Model.ANY_TYPE);
-		Character typeA=typeOfField(a);
-		Character typeB=typeOfField(b);
-		boolean aIsDefinitelyArray=(typeA!=null && (typeA&Model.ARRAY_TYPE)!=0);
-		boolean bIsDefinitelyArray=(typeB!=null && (typeB&Model.ARRAY_TYPE)!=0);
-		boolean aIsDefinitelyNotArray=(typeA!=null && typeA!=Model.ANY_TYPE && (typeA&Model.ARRAY_TYPE)==0);
-		boolean bIsDefinitelyNotArray=(typeB!=null && typeB!=Model.ANY_TYPE && (typeB&Model.ARRAY_TYPE)==0);
-		if(op==null){ //field IN field
+		String a = translateField(field1, Model.ANY_TYPE);
+		String b = translateField(field2, Model.ANY_TYPE);
+		Character typeA = typeOfField(a);
+		Character typeB = typeOfField(b);
+		boolean aIsDefinitelyArray = (typeA != null && (typeA & Model.ARRAY_TYPE) != 0);
+		boolean bIsDefinitelyArray = (typeB != null && (typeB & Model.ARRAY_TYPE) != 0);
+		boolean aIsDefinitelyNotArray = (typeA!= null && typeA != Model.ANY_TYPE && (typeA & Model.ARRAY_TYPE) == 0);
+		boolean bIsDefinitelyNotArray = (typeB!= null && typeB != Model.ANY_TYPE && (typeB & Model.ARRAY_TYPE) == 0);
+		if(op == null){ //field IN field
 			if(aIsDefinitelyArray){
-				throw new Exception("Field "+a+" is an array while a non-array field was expected");
+				throw new Exception("Field " + a + " is an array while a non-array field was expected");
 			}
 			if(bIsDefinitelyNotArray){
-				throw new Exception("Field "+b+" is not an array while an array was expected");
+				throw new Exception("Field " + b + " is not an array while an array was expected");
 			}
-			return new Document("$expr",new Document("$in",List.<Object>of("$"+a,new Document("$cond",List.<Object>of(new Document("$isArray","$"+b),"$"+b,List.of())))));
+			return new Document("$expr", new Document("$in", List.<Object>of("$" + a, new Document("$cond", List.<Object>of(new Document("$isArray", "$" + b), "$" + b, List.of())))));
 		}
-		if((aIsDefinitelyArray && bIsDefinitelyNotArray)||(aIsDefinitelyNotArray&&bIsDefinitelyArray)){
-			throw new Exception("The fields "+a+" and "+b+" must both be or both not be arrays");
+		if((aIsDefinitelyArray && bIsDefinitelyNotArray) || (aIsDefinitelyNotArray && bIsDefinitelyArray)){
+			throw new Exception("The fields " + a + " and " + b + " must both be or both not be arrays");
 		}
-		return new Document("$and",List.<Document>of(new Document(a,new Document("$exists",true)),new Document("$expr",new Document(op,List.<String>of("$"+a,"$"+b)))));
+		return new Document("$and", List.<Document>of(new Document(a, new Document("$exists", true)), new Document("$expr", new Document(op, List.<String>of("$" + a, "$" + b)))));
 	}
 
-	/*
-	* Finds code ranges when querying the Response.statusCode field
-	*/
-	public static Document statusCodeCondition(String field,String operator, double value) {
-		ArrayList<Document> arr=new ArrayList<Document>();
+	/**
+	 * Finds code ranges when querying the Response.statusCode field
+	 * 
+	 * @param field the field name
+	 * @param operator the comparison operator
+	 * @param value the value to compare with
+	 * @return an object representing the filtering condition
+	 * 
+	 */
+	public static Document statusCodeCondition(String field, String operator, double value) {
+		ArrayList<Document> arr = new ArrayList<Document>();
 		arr.add(new Document(field, new Document(operator, value)));
-		if(operator.equals("$eq") && value==(int)value) {
-			int firstDigit=((int)value)/100;
-			if(firstDigit>=1 && firstDigit<=5){
-				arr.add(new Document(field,firstDigit+"XX"));
+		if(operator.equals("$eq") && value == (int)value) {
+			int firstDigit = ((int)value) / 100;
+			if(firstDigit >= 1 && firstDigit <= 5){
+				arr.add(new Document(field, firstDigit + "XX"));
 			}
 		}else if(operator.equals("$ne")) {
-			for(int i=1; i<=5; i++){
-				arr.add(new Document(field,i+"XX"));
+			for(int i = 1; i <= 5; i++){
+				arr.add(new Document(field, i + "XX"));
 			}
 		}else if(operator.equals("$gt")) {
-			int firstDigit=value<100?1:((int)(value+1))/100;
-			while(firstDigit<=5) {
-				arr.add(new Document(field,firstDigit+"XX"));
+			int firstDigit = value<100 ? 1 : ((int)(value + 1))/100;
+			while(firstDigit <= 5) {
+				arr.add(new Document(field, firstDigit + "XX"));
 				firstDigit++;
 			} 
 		}else if(operator.equals("$gte")) {
-			int firstDigit=value<100?1:((int)value)/100;
-			while(firstDigit<=5) {
-				arr.add(new Document(field,firstDigit+"XX"));
+			int firstDigit = value<100 ? 1 : ((int)value)/100;
+			while(firstDigit <= 5) {
+				arr.add(new Document(field, firstDigit + "XX"));
 				firstDigit++;
 			}
 		}else if(operator.equals("$lt")) {
-			int firstDigit=value>599?5:((int)(value-1))/100;
-			while(firstDigit>=1) {
-				arr.add(new Document(field,firstDigit+"XX"));
+			int firstDigit = value>599 ? 5 : ((int)(value-1))/100;
+			while(firstDigit >= 1) {
+				arr.add(new Document(field, firstDigit + "XX"));
 				firstDigit--;
 			}
 		}else if(operator.equals("$lte")) {
-			int firstDigit=value>599?5:((int)value)/100;
-			while(firstDigit>=1) {
-				arr.add(new Document(field,firstDigit+"XX"));
+			int firstDigit = value>599 ? 5 : ((int)value)/100;
+			while(firstDigit >= 1) {
+				arr.add(new Document(field, firstDigit + "XX"));
 				firstDigit--;
 			}
 		}
-		return new Document("$or",arr);
+		return new Document("$or", arr);
 	}
 :};	
 
