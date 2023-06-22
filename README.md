@@ -37,5 +37,5 @@ Distributed under the GPL-3.0 License. See [`LICENSE`](LICENSE) for more informa
 - Currently, only OpenAPI documents conforming to OpenAPI Specification v3.1.0 are supported
 
 ## References
-- I. Apostolakis, N. Mainas and E.G.M. Petrakis, Simple querying service for OpenAPI descriptions with semantic extensions, Information Systems (2023) 102241, https://doi.org/10.1016/j.is.2023.102241
-- I. Apostolakis, Simple querying service for OpenAPI descriptions with Semantic Web extensions, Diploma thesis, School of Electrical and Computer Engineering, Technical University of Crete (TUC), Chania, Crete, Greece (May 2022), https://dias.library.tuc.gr/view/92123
+- I. Apostolakis, N. Mainas and E.G.M. Petrakis, "Simple querying service for OpenAPI descriptions with semantic extensions", *Information Systems* 117 (2023), 102241, https://doi.org/10.1016/j.is.2023.102241
+- I. Apostolakis, "Simple querying service for OpenAPI descriptions with Semantic Web extensions", Diploma thesis, School of Electrical and Computer Engineering, Technical University of Crete (TUC), Chania, Crete, Greece (May 2022), https://dias.library.tuc.gr/view/92123
